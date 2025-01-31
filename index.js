@@ -76,37 +76,57 @@ client.on('interactionCreate', async (interaction) => {
 
 // **4️⃣ Listen for new messages and forward them**
 client.on('messageCreate', async (message) => {
-  if (message.author.bot) return;
-
-  const guildId = message.guild.id;
-  if (channelMappings[guildId]) {
-    for (let mapping of channelMappings[guildId]) {
-      if (message.channel.id === mapping.source) {
-        const targetChannel = await message.guild.channels.fetch(mapping.target);
-        if (targetChannel) {
-          targetChannel.send(`Forwarded message: ${message.content}`);
-        }
-      }
-    }
-  }
-
-  // Cross-server forwarding
-  for (let mappedGuildId in channelMappings) {
-    if (mappedGuildId === guildId) continue;
-
-    for (let mapping of channelMappings[mappedGuildId]) {
-      if (message.channel.id === mapping.source) {
-        const targetGuild = client.guilds.cache.get(mappedGuildId);
-        if (targetGuild) {
-          const targetChannel = await targetGuild.channels.fetch(mapping.target);
+    if (message.author.bot) return;
+  
+    // Add logging to see the message details and source channel ID
+    console.log(`Received message: ${message.content} in channel: ${message.channel.id}`);
+  
+    const guildId = message.guild.id;
+    
+    // Check if there are mappings for the guild
+    if (channelMappings[guildId]) {
+      for (let mapping of channelMappings[guildId]) {
+        // Check if the message is in the source channel
+        if (message.channel.id === mapping.source) {
+          const targetChannel = await message.guild.channels.fetch(mapping.target);
+  
           if (targetChannel) {
-            targetChannel.send(`Forwarded message: ${message.content}`);
+            // Log the forwarding process
+            console.log(`Forwarding message from ${message.channel.name} to ${targetChannel.name}`);
+            try {
+              // Forward (copy) the message to the target channel
+              await targetChannel.send(`Forwarded message: ${message.content}`);
+            } catch (error) {
+              console.error('❌ Error copying message:', error);
+            }
           }
         }
       }
     }
-  }
-});
+  
+    // Cross-server forwarding (if applicable)
+    for (let mappedGuildId in channelMappings) {
+      if (mappedGuildId === guildId) continue;
+  
+      for (let mapping of channelMappings[mappedGuildId]) {
+        if (message.channel.id === mapping.source) {
+          const targetGuild = client.guilds.cache.get(mappedGuildId);
+          if (targetGuild) {
+            const targetChannel = await targetGuild.channels.fetch(mapping.target);
+            if (targetChannel) {
+              console.log(`Forwarding message from ${message.channel.name} to ${targetChannel.name} (cross-server)`);
+              try {
+                await targetChannel.send(`Forwarded message: ${message.content}`);
+              } catch (error) {
+                console.error('❌ Error forwarding message to another server:', error);
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+  
 
 // **5️⃣ Login the bot**
 client.login(process.env.DISCORD_TOKEN);
