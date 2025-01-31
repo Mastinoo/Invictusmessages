@@ -78,31 +78,64 @@ client.on('interactionCreate', async (interaction) => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
   
-    // Add logging to see the message details and source channel ID
     console.log(`Received message: ${message.content} in channel: ${message.channel.id}`);
   
     const guildId = message.guild.id;
-    
-    // Check if there are mappings for the guild
+  
+    // Check if there are mappings for the current guild
     if (channelMappings[guildId]) {
       for (let mapping of channelMappings[guildId]) {
-        // Check if the message is in the source channel
         if (message.channel.id === mapping.source) {
-          const targetChannel = await message.guild.channels.fetch(mapping.target);
+          try {
+            const targetChannel = await message.guild.channels.fetch(mapping.target);
   
-          if (targetChannel) {
-            // Log the forwarding process
-            console.log(`Forwarding message from ${message.channel.name} to ${targetChannel.name}`);
-            try {
-              // Forward (copy) the message to the target channel
+            // Log the target channel info
+            console.log(`Target channel fetched: ${targetChannel ? targetChannel.name : 'Not found'}`);
+  
+            if (targetChannel) {
+              // Log the forwarding action
+              console.log(`Forwarding message from ${message.channel.name} to ${targetChannel.name}`);
               await targetChannel.send(`Forwarded message: ${message.content}`);
+            } else {
+              console.log(`❌ Failed to find target channel: ${mapping.target}`);
+            }
+          } catch (error) {
+            console.error('❌ Error forwarding message:', error);
+          }
+        }
+      }
+    }
+  
+    // Cross-server forwarding (if applicable)
+    for (let mappedGuildId in channelMappings) {
+      if (mappedGuildId === guildId) continue;
+  
+      for (let mapping of channelMappings[mappedGuildId]) {
+        if (message.channel.id === mapping.source) {
+          const targetGuild = client.guilds.cache.get(mappedGuildId);
+          if (targetGuild) {
+            try {
+              const targetChannel = await targetGuild.channels.fetch(mapping.target);
+  
+              // Log the target channel info for cross-server
+              console.log(`Cross-server: Target channel fetched: ${targetChannel ? targetChannel.name : 'Not found'}`);
+  
+              if (targetChannel) {
+                console.log(`Forwarding message (cross-server) from ${message.channel.name} to ${targetChannel.name}`);
+                await targetChannel.send(`Forwarded message: ${message.content}`);
+              } else {
+                console.log(`❌ Failed to find target channel in cross-server: ${mapping.target}`);
+              }
             } catch (error) {
-              console.error('❌ Error copying message:', error);
+              console.error('❌ Error forwarding message to another server:', error);
             }
           }
         }
       }
     }
+  });
+  
+
   
     // Cross-server forwarding (if applicable)
     for (let mappedGuildId in channelMappings) {
@@ -124,8 +157,7 @@ client.on('messageCreate', async (message) => {
           }
         }
       }
-    }
-  });
+    };
   
 
 // **5️⃣ Login the bot**
