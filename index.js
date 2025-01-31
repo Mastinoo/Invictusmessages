@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, Intents } = require('discord.js');
+const { Client, GatewayIntentBits } = require('discord.js');
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const fs = require('fs');
 
@@ -9,7 +9,11 @@ let channelMappings = loadMappings();
 
 // Initialize Discord client
 const client = new Client({
-  intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent, // Optional, depending on your needs
+  ],
 });
 
 // When the bot is ready
