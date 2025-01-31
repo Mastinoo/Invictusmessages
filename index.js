@@ -24,8 +24,13 @@ const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(fil
 // Load command data and add to the commands array
 for (const file of commandFiles) {
   const command = require(`./commands/${file}`);
-  commands.push(command);  // Add the entire command object
+  if (command.data) {
+    commands.push(command.data.toJSON());  // Ensure only command data is pushed
+  } else {
+    console.warn(`Warning: Command file ${file} is missing "data" property!`);
+  }
 }
+
 
 // Register commands when the bot is ready
 client.once('ready', async () => {
