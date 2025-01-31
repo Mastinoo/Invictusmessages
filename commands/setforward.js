@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { loadMappings, saveMappings } = require('../index'); // Adjust path to your main bot file
+const { loadMappings, saveMappings } = require('../mappings'); // Adjust path to mappings.js
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -19,7 +19,7 @@ module.exports = {
       return interaction.reply('Both channels must be text channels!');
     }
 
-    // Load the current channel mappings
+    // Load existing mappings
     const channelMappings = loadMappings();
 
     // Default server to the current guild if not provided

@@ -2,6 +2,7 @@ require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const { loadMappings, saveMappings } = require('./mappings'); // Import loadMappings and saveMappings from mappings.js
 
 // Initialize the client
 const client = new Client({
@@ -14,7 +15,7 @@ const client = new Client({
 
 // Load mappings from the mappings.json file
 const MAPPINGS_FILE_PATH = process.env.MAPPINGS_FILE_PATH;
-let channelMappings = loadMappings();
+let channelMappings = loadMappings(); // Load mappings at the start
 
 // Dynamically load all commands from the "commands" directory
 const commands = [];
@@ -23,7 +24,7 @@ const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(fil
 // Load command data and add to the commands array
 for (const file of commandFiles) {
   const command = require(`./commands/${file}`);
-  commands.push(command.data.toJSON());
+  commands.push(command);  // Add the entire command object
 }
 
 // Register commands when the bot is ready
@@ -103,21 +104,6 @@ client.on('messageCreate', async (message) => {
 
 // Login the bot with the token from .env
 client.login(process.env.DISCORD_TOKEN);
-
-// Helper function to load mappings from file
-function loadMappings() {
-  try {
-    const data = fs.readFileSync(MAPPINGS_FILE_PATH, 'utf8');
-    return JSON.parse(data);
-  } catch (err) {
-    return {}; // Return an empty object if the file doesn't exist yet
-  }
-}
-
-// Helper function to save mappings to file
-function saveMappings(mappings) {
-  fs.writeFileSync(MAPPINGS_FILE_PATH, JSON.stringify(mappings, null, 2), 'utf8');
-}
 
 // Dummy server to bind to a port (for Render)
 const http = require('http');
