@@ -1,25 +1,50 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
-const { SlashCommandBuilder } = require('@discordjs/builders');
 const fs = require('fs');
+const path = require('path');
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
+});
 
 // Load mappings from the mappings.json file
 const MAPPINGS_FILE_PATH = process.env.MAPPINGS_FILE_PATH;
 let channelMappings = loadMappings();
 
-// Initialize Discord client
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent, // Optional, depending on your needs
-  ],
-});
+// Dynamically load all commands from the "commands" directory
+const commands = [];
+const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(file => file.endsWith('.js'));
 
-// When the bot is ready
-client.once('ready', () => {
+for (const file of commandFiles) {
+  const command = require(`./commands/${file}`);
+  commands.push(command.data.toJSON());
+}
+
+// Register commands when the bot is ready
+client.once('ready', async () => {
   console.log(`Logged in as ${client.user.tag}`);
-  require('./register-commands'); // Register slash commands when the bot is ready
+
+  const { REST } = require('@discordjs/rest');
+  const { Routes } = require('discord-api-types/v9');
+
+  const rest = new REST({ version: '9' }).setToken(process.env.DISCORD_TOKEN);
+
+  try {
+    console.log('Started refreshing application (/) commands.');
+    
+    await rest.put(
+      Routes.applicationCommands(process.env.CLIENT_ID),
+      { body: commands },
+    );
+
+    console.log('Successfully reloaded application (/) commands.');
+  } catch (error) {
+    console.error('Error while registering commands:', error);
+  }
 });
 
 // Listen for interactions (slash commands)
@@ -28,34 +53,15 @@ client.on('interactionCreate', async (interaction) => {
 
   const { commandName } = interaction;
 
-  if (commandName === 'setforward') {
-    const sourceChannel = interaction.options.getChannel('source');
-    const targetChannel = interaction.options.getChannel('target');
-    const serverId = interaction.options.getString('server'); // Optional server ID
-
-    // Ensure both channels are text channels
-    if (sourceChannel.type !== 'GUILD_TEXT' || targetChannel.type !== 'GUILD_TEXT') {
-      return interaction.reply('Both channels must be text channels!');
+  // Find and execute the correct command
+  const command = commands.find(cmd => cmd.data.name === commandName);
+  if (command) {
+    try {
+      await command.execute(interaction);
+    } catch (error) {
+      console.error('Error executing command:', error);
+      await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
     }
-
-    // Default server to the current guild if not provided
-    const guildId = serverId || interaction.guild.id;
-
-    // Store the source-target mapping for the current guild (or provided server)
-    if (!channelMappings[guildId]) {
-      channelMappings[guildId] = [];
-    }
-
-    channelMappings[guildId].push({
-      source: sourceChannel.id,
-      target: targetChannel.id,
-    });
-
-    // Save updated mappings to the JSON file
-    saveMappings(channelMappings);
-
-    await interaction.reply(`Messages from ${sourceChannel.name} will be forwarded to ${targetChannel.name} in the server ${guildId}.`);
-    console.log(`Source and target channels for guild ${guildId}:`, channelMappings[guildId]);
   }
 });
 
