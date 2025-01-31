@@ -3,6 +3,7 @@ const { Client, GatewayIntentBits } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
+// Initialize the client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -19,6 +20,7 @@ let channelMappings = loadMappings();
 const commands = [];
 const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(file => file.endsWith('.js'));
 
+// Load command data and add to the commands array
 for (const file of commandFiles) {
   const command = require(`./commands/${file}`);
   commands.push(command.data.toJSON());
@@ -37,7 +39,7 @@ client.once('ready', async () => {
     console.log('Started refreshing application (/) commands.');
     
     await rest.put(
-      Routes.applicationCommands(process.env.CLIENT_ID),
+      Routes.applicationCommands(process.env.CLIENT_ID), // Register globally or use Routes.applicationGuildCommands() for a single guild
       { body: commands },
     );
 
@@ -54,10 +56,10 @@ client.on('interactionCreate', async (interaction) => {
   const { commandName } = interaction;
 
   // Find and execute the correct command
-  const command = commands.find(cmd => cmd.data.name === commandName);
+  const command = commands.find(cmd => cmd.name === commandName);
   if (command) {
     try {
-      await command.execute(interaction);
+      await command.execute(interaction);  // Make sure command has execute() method defined in its file
     } catch (error) {
       console.error('Error executing command:', error);
       await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
@@ -116,9 +118,10 @@ function loadMappings() {
 function saveMappings(mappings) {
   fs.writeFileSync(MAPPINGS_FILE_PATH, JSON.stringify(mappings, null, 2), 'utf8');
 }
+
+// Dummy server to bind to a port (for Render)
 const http = require('http');
 
-// Dummy server to bind to a port
 const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('Bot is running');

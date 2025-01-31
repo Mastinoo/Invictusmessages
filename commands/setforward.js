@@ -1,4 +1,5 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
+const { loadMappings, saveMappings } = require('../path-to-your-main-bot-file'); // Update the path accordingly
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -7,7 +8,7 @@ module.exports = {
     .addChannelOption(option => option.setName('source').setDescription('Source channel').setRequired(true))
     .addChannelOption(option => option.setName('target').setDescription('Target channel').setRequired(true))
     .addStringOption(option => option.setName('server').setDescription('Optional server ID')),
-  
+
   async execute(interaction) {
     const sourceChannel = interaction.options.getChannel('source');
     const targetChannel = interaction.options.getChannel('target');
@@ -17,6 +18,9 @@ module.exports = {
     if (sourceChannel.type !== 'GUILD_TEXT' || targetChannel.type !== 'GUILD_TEXT') {
       return interaction.reply('Both channels must be text channels!');
     }
+
+    // Load the current channel mappings
+    const channelMappings = loadMappings();
 
     // Default server to the current guild if not provided
     const guildId = serverId || interaction.guild.id;
