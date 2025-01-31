@@ -2,7 +2,6 @@ require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
-const { loadMappings, saveMappings } = require('./mappings'); // Import loadMappings and saveMappings from mappings.js
 
 // Initialize the client
 const client = new Client({
@@ -15,67 +14,66 @@ const client = new Client({
 
 // Load mappings from the mappings.json file
 const MAPPINGS_FILE_PATH = process.env.MAPPINGS_FILE_PATH;
-let channelMappings = loadMappings(); // Load mappings at the start
+let channelMappings = loadMappings();
 
-// Dynamically load all commands from the "commands" directory
-const commands = [];
+// **1️⃣ Load all commands properly and store them in a Map**
+const commands = new Map();
 const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(file => file.endsWith('.js'));
 
-// Load command data and add to the commands array
 for (const file of commandFiles) {
   const command = require(`./commands/${file}`);
-  if (command.data) {
-    commands.push(command.data.toJSON());  // Ensure only command data is pushed
+  if (command.data && typeof command.execute === 'function') {
+    commands.set(command.data.name, command); // Store full command object
   } else {
-    console.warn(`Warning: Command file ${file} is missing "data" property!`);
+    console.warn(`⚠️ Warning: Command file "${file}" is missing "data" or "execute"!`);
   }
 }
 
-
-// Register commands when the bot is ready
+// **2️⃣ Register commands when the bot is ready**
 client.once('ready', async () => {
-  console.log(`Logged in as ${client.user.tag}`);
+  console.log(`✅ Logged in as ${client.user.tag}`);
 
   const { REST } = require('@discordjs/rest');
   const { Routes } = require('discord-api-types/v9');
-
   const rest = new REST({ version: '9' }).setToken(process.env.DISCORD_TOKEN);
 
   try {
-    console.log('Started refreshing application (/) commands.');
-    
+    console.log('🚀 Started refreshing application (/) commands.');
+
+    // Only send .data.toJSON() when registering
     await rest.put(
-      Routes.applicationCommands(process.env.CLIENT_ID), // Register globally or use Routes.applicationGuildCommands() for a single guild
-      { body: commands },
+      Routes.applicationCommands(process.env.CLIENT_ID), 
+      { body: [...commands.values()].map(cmd => cmd.data.toJSON()) }
     );
 
-    console.log('Successfully reloaded application (/) commands.');
+    console.log('✅ Successfully reloaded application (/) commands.');
   } catch (error) {
-    console.error('Error while registering commands:', error);
+    console.error('❌ Error while registering commands:', error);
   }
 });
 
-// Listen for interactions (slash commands)
+// **3️⃣ Listen for interactions (slash commands)**
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isCommand()) return;
 
-  const { commandName } = interaction;
+  const command = commands.get(interaction.commandName); // Retrieve command from Map
 
-  // Find and execute the correct command
-  const command = commands.find(cmd => cmd.name === commandName);
-  if (command) {
-    try {
-      await command.execute(interaction);  // Make sure command has execute() method defined in its file
-    } catch (error) {
-      console.error('Error executing command:', error);
-      await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
-    }
+  if (!command) {
+    console.error(`❌ Command "${interaction.commandName}" not found.`);
+    return;
+  }
+
+  try {
+    await command.execute(interaction);  // Execute the command
+  } catch (error) {
+    console.error('❌ Error executing command:', error);
+    await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
   }
 });
 
-// Listen for new messages and forward them to the target channel
+// **4️⃣ Listen for new messages and forward them**
 client.on('messageCreate', async (message) => {
-  if (message.author.bot) return; // Avoid forwarding bot messages
+  if (message.author.bot) return;
 
   const guildId = message.guild.id;
   if (channelMappings[guildId]) {
@@ -89,7 +87,7 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // Forward between different guilds (cross-server forwarding)
+  // Cross-server forwarding
   for (let mappedGuildId in channelMappings) {
     if (mappedGuildId === guildId) continue;
 
@@ -107,17 +105,15 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// Login the bot with the token from .env
+// **5️⃣ Login the bot**
 client.login(process.env.DISCORD_TOKEN);
 
-// Dummy server to bind to a port (for Render)
+// **6️⃣ Dummy server to prevent Render from killing the bot**
 const http = require('http');
-
 const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('Bot is running');
 });
-
 server.listen(process.env.PORT || 3000, () => {
-  console.log('Bot is running on port 3000');
+  console.log('🌐 Bot is running on port 3000');
 });
