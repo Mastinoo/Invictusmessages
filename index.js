@@ -2,6 +2,7 @@ require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const { loadMappings, saveMappings } = require('./mappings'); // Import saveMappings
 
 // Initialize the client
 const client = new Client({
@@ -15,24 +16,8 @@ const client = new Client({
 // Define path to mappings file
 const MAPPINGS_FILE_PATH = process.env.MAPPINGS_FILE_PATH;
 
-// ✅ Add this function before calling loadMappings()
-function loadMappings() {
-  if (!fs.existsSync(MAPPINGS_FILE_PATH)) {
-    return {}; // Return empty object if file does not exist
-  }
-
-  try {
-    const data = fs.readFileSync(MAPPINGS_FILE_PATH, 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    console.error('❌ Error loading mappings:', error);
-    return {};
-  }
-}
-
-// Load mappings
+// Load mappings from mappings.js
 let channelMappings = loadMappings();
-
 
 // **1️⃣ Load all commands properly and store them in a Map**
 const commands = new Map();
