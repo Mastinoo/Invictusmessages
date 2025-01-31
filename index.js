@@ -116,3 +116,14 @@ function loadMappings() {
 function saveMappings(mappings) {
   fs.writeFileSync(MAPPINGS_FILE_PATH, JSON.stringify(mappings, null, 2), 'utf8');
 }
+const http = require('http');
+
+// Dummy server to bind to a port
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Bot is running');
+});
+
+server.listen(process.env.PORT || 3000, () => {
+  console.log('Bot is running on port 3000');
+});
