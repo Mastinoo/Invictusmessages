@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { loadMappings, saveMappings } = require('../path-to-your-main-bot-file'); // Update the path accordingly
+const { loadMappings, saveMappings } = require('../index'); // Adjust path to your main bot file
 
 module.exports = {
   data: new SlashCommandBuilder()
