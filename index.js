@@ -1,92 +1,108 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, Intents } = require('discord.js');
+const { SlashCommandBuilder } = require('@discordjs/builders');
+const fs = require('fs');
+
+// Load mappings from the mappings.json file
+const MAPPINGS_FILE_PATH = process.env.MAPPINGS_FILE_PATH;
+let channelMappings = loadMappings();
+
+// Initialize Discord client
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+  intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES],
 });
 
-// Store the forward configurations (guildID -> { sourceChannelId: targetGuildId -> targetChannelId })
-let forwardConfig = {}; // { guildId: { sourceChannelId: { targetGuildId: targetChannelId } } }
+// When the bot is ready
+client.once('ready', () => {
+  console.log(`Logged in as ${client.user.tag}`);
+  require('./register-commands'); // Register slash commands when the bot is ready
+});
 
-// Command to set the source and target channels across servers
+// Listen for interactions (slash commands)
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isCommand()) return;
+
+  const { commandName } = interaction;
+
+  if (commandName === 'setforward') {
+    const sourceChannel = interaction.options.getChannel('source');
+    const targetChannel = interaction.options.getChannel('target');
+    const serverId = interaction.options.getString('server'); // Optional server ID
+
+    // Ensure both channels are text channels
+    if (sourceChannel.type !== 'GUILD_TEXT' || targetChannel.type !== 'GUILD_TEXT') {
+      return interaction.reply('Both channels must be text channels!');
+    }
+
+    // Default server to the current guild if not provided
+    const guildId = serverId || interaction.guild.id;
+
+    // Store the source-target mapping for the current guild (or provided server)
+    if (!channelMappings[guildId]) {
+      channelMappings[guildId] = [];
+    }
+
+    channelMappings[guildId].push({
+      source: sourceChannel.id,
+      target: targetChannel.id,
+    });
+
+    // Save updated mappings to the JSON file
+    saveMappings(channelMappings);
+
+    await interaction.reply(`Messages from ${sourceChannel.name} will be forwarded to ${targetChannel.name} in the server ${guildId}.`);
+    console.log(`Source and target channels for guild ${guildId}:`, channelMappings[guildId]);
+  }
+});
+
+// Listen for new messages and forward them to the target channel
 client.on('messageCreate', async (message) => {
-    // Ignore bot messages and messages from a different bot
-    if (message.author.bot) return;
+  if (message.author.bot) return; // Avoid forwarding bot messages
 
-    // Command to set source and target channels
-    if (message.content.startsWith('!setforward')) {
-        const args = message.content.split(' ');
-
-        // Ensure the correct format of the command
-        if (args.length === 5) {
-            const sourceGuildId = args[1];
-            const sourceChannelId = args[2].replace(/[<#>]/g, ''); // Remove any channel ID format symbols
-            const targetGuildId = args[3];
-            const targetChannelId = args[4].replace(/[<#>]/g, '');
-
-            // Check if both source and target channels exist in their respective guilds
-            const sourceGuild = client.guilds.cache.get(sourceGuildId);
-            const targetGuild = client.guilds.cache.get(targetGuildId);
-
-            if (sourceGuild && targetGuild) {
-                // Check if both channels exist in their respective guilds
-                const sourceChannel = sourceGuild.channels.cache.get(sourceChannelId);
-                const targetChannel = targetGuild.channels.cache.get(targetChannelId);
-
-                if (sourceChannel && targetChannel) {
-                    // Set the forward configuration
-                    if (!forwardConfig[sourceGuildId]) forwardConfig[sourceGuildId] = {};
-                    forwardConfig[sourceGuildId][sourceChannelId] = {
-                        targetGuildId,
-                        targetChannelId
-                    };
-                    message.reply(`Successfully set up forwarding from <#${sourceChannelId}> in server ${sourceGuild.name} to <#${targetChannelId}> in server ${targetGuild.name}.`);
-                } else {
-                    message.reply('Invalid source or target channel ID.');
-                }
-            } else {
-                message.reply('Invalid source or target guild ID.');
-            }
-        } else {
-            message.reply('Please use the format: !setforward <source_guild_id> <source_channel> <target_guild_id> <target_channel>');
+  const guildId = message.guild.id;
+  if (channelMappings[guildId]) {
+    for (let mapping of channelMappings[guildId]) {
+      if (message.channel.id === mapping.source) {
+        const targetChannel = await message.guild.channels.fetch(mapping.target);
+        if (targetChannel) {
+          targetChannel.send(`Forwarded message: ${message.content}`);
         }
+      }
     }
+  }
 
-    // Command to remove forwarding
-    if (message.content.startsWith('!removeforward')) {
-        const args = message.content.split(' ');
+  // Forward between different guilds (cross-server forwarding)
+  for (let mappedGuildId in channelMappings) {
+    if (mappedGuildId === guildId) continue;
 
-        if (args.length === 3) {
-            const sourceGuildId = args[1];
-            const sourceChannelId = args[2].replace(/[<#>]/g, '');
-
-            // Remove the forward configuration
-            if (forwardConfig[sourceGuildId] && forwardConfig[sourceGuildId][sourceChannelId]) {
-                delete forwardConfig[sourceGuildId][sourceChannelId];
-                message.reply(`Removed forwarding from <#${sourceChannelId}> in server ${sourceGuildId}.`);
-            } else {
-                message.reply('No forwarding found for this channel.');
-            }
-        } else {
-            message.reply('Please use the format: !removeforward <source_guild_id> <source_channel>');
-        }
-    }
-
-    // Listen for messages in source channels and forward them
-    const sourceGuildId = message.guild.id;
-    const sourceChannelId = message.channel.id;
-
-    if (forwardConfig[sourceGuildId] && forwardConfig[sourceGuildId][sourceChannelId]) {
-        const { targetGuildId, targetChannelId } = forwardConfig[sourceGuildId][sourceChannelId];
-        
-        const targetGuild = client.guilds.cache.get(targetGuildId);
+    for (let mapping of channelMappings[mappedGuildId]) {
+      if (message.channel.id === mapping.source) {
+        const targetGuild = client.guilds.cache.get(mappedGuildId);
         if (targetGuild) {
-            const targetChannel = targetGuild.channels.cache.get(targetChannelId);
-            if (targetChannel) {
-                // Forward the message content
-                targetChannel.send(`Forwarded from <#${sourceChannelId}> in ${message.guild.name}: ${message.content}`);
-            }
+          const targetChannel = await targetGuild.channels.fetch(mapping.target);
+          if (targetChannel) {
+            targetChannel.send(`Forwarded message: ${message.content}`);
+          }
         }
+      }
     }
+  }
 });
 
-client.login(process.env.DISCORD_TOKEN); // Replace with your bot's token
+// Login the bot with the token from .env
+client.login(process.env.DISCORD_TOKEN);
+
+// Helper function to load mappings from file
+function loadMappings() {
+  try {
+    const data = fs.readFileSync(MAPPINGS_FILE_PATH, 'utf8');
+    return JSON.parse(data);
+  } catch (err) {
+    return {}; // Return an empty object if the file doesn't exist yet
+  }
+}
+
+// Helper function to save mappings to file
+function saveMappings(mappings) {
+  fs.writeFileSync(MAPPINGS_FILE_PATH, JSON.stringify(mappings, null, 2), 'utf8');
+}
